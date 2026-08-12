@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Transmitir Tela</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
+
+  :root{
+    --bg:#0a0e13;
+    --surface:#11161d;
+    --surface2:#161d26;
+    --line:#232c37;
+    --text:#e7edf3;
+    --muted:#7c8a99;
+    --signal:#5eead4;
+    --signal-dim:#1e3d38;
+    --warm:#ff8a5b;
+    --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, #0e1620 0%, transparent 45%),
+      radial-gradient(circle at 90% 90%, #10201c 0%, transparent 40%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:28px 18px 60px;
+  }
+  .mono{font-family:'JetBrains Mono', monospace;}
+  header{
+    text-align:center;
+    margin-bottom:34px;
+    max-width:520px;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--signal);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .eyebrow .dot{
+    width:6px; height:6px; border-radius:50%;
+    background:var(--signal);
+    box-shadow:0 0 0 0 rgba(94,234,212,.6);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(94,234,212,.55);}
+    70%{box-shadow:0 0 0 9px rgba(94,234,212,0);}
+    100%{box-shadow:0 0 0 0 rgba(94,234,212,0);}
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:clamp(28px, 6vw, 40px);
+    letter-spacing:-.02em;
+    line-height:1.1;
+  }
+  h1 span{color:var(--signal);}
+  header p{
+    color:var(--muted);
+    font-size:14.5px;
+    margin-top:12px;
+    line-height:1.55;
+  }
+
+  /* ---- role picker ---- */
+  .picker{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    width:100%;
+    max-width:520px;
+  }
+  @media (max-width:480px){ .picker{grid-template-columns:1fr;} }
+  .role-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:24px 18px;
+    text-align:left;
+    cursor:pointer;
+    transition:border-color .2s ease, transform .15s ease, background .2s ease;
+    color:var(--text);
+    font-family:inherit;
+  }
+  .role-card:hover{border-color:var(--signal); transform:translateY(-2px); background:var(--surface2);}
+  .role-card .icon{font-size:26px; margin-bottom:14px; display:block;}
+  .role-card .title{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:17px; margin-bottom:6px;}
+  .role-card .desc{font-size:13px; color:var(--muted); line-height:1.5;}
+
+  /* ---- panels ---- */
+  .panel{
+    width:100%; max-width:460px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:28px;
+    display:none;
+  }
+  .panel.active{display:block; animation:rise .35s ease;}
+  @keyframes rise{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+
+  .back-btn{
+    background:none; border:none; color:var(--muted);
+    font-family:'JetBrains Mono', monospace; font-size:12px;
+    cursor:pointer; margin-bottom:18px; display:flex; align-items:center; gap:6px;
+  }
+  .back-btn:hover{color:var(--text);}
+
+  .status-row{
+    display:flex; align-items:center; gap:10px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px; color:var(--muted);
+    padding:10px 14px;
+    background:var(--surface2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    margin-bottom:20px;
+  }
+  .status-row .led{
+    width:8px; height:8px; border-radius:50%;
+    background:var(--muted); flex-shrink:0;
+  }
+  .status-row.ok .led{background:var(--signal); box-shadow:0 0 8px var(--signal);}
+  .status-row.wait .led{animation:blink 1.1s infinite;}
+  .status-row.err .led{background:var(--danger);}
+  @keyframes blink{ 50%{opacity:.25;} }
+
+  .code-box{
+    background:var(--surface2);
+    border:1px dashed var(--line);
+    border-radius:14px;
+    padding:20px;
+    text-align:center;
+    margin-bottom:20px;
+  }
+  .code-box .label{
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    margin-bottom:10px;
+  }
+  .code-box .code{
+    font-family:'JetBrains Mono', monospace;
+    font-size:26px; font-weight:600; letter-spacing:.06em;
+    color:var(--signal);
+  }
+  .code-box img{margin-top:16px; border-radius:10px; background:#fff; padding:8px;}
+
+  button.primary{
+    width:100%;
+    background:var(--signal);
+    color:#062521;
+    border:none;
+    padding:15px;
+    border-radius:12px;
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:15px;
+    cursor:pointer;
+    transition:filter .15s ease, transform .1s ease;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:active{transform:scale(.98);}
+  button.primary:disabled{opacity:.45; cursor:not-allowed;}
+  button.secondary{
+    width:100%;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:13px;
+    border-radius:12px;
+    font-family:'Inter', sans-serif; font-size:14px; font-weight:500;
+    cursor:pointer; margin-top:10px;
+  }
+  button.secondary:hover{border-color:var(--danger); color:var(--danger);}
+
+  input.code-input{
+    width:100%;
+    background:var(--surface2);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:'JetBrains Mono', monospace;
+    font-size:20px;
+    letter-spacing:.08em;
+    text-align:center;
+    text-transform:uppercase;
+    padding:16px;
+    border-radius:12px;
+    margin-bottom:16px;
+    outline:none;
+  }
+  input.code-input:focus{border-color:var(--signal);}
+
+  video{
+    width:100%;
+    border-radius:14px;
+    background:#000;
+    display:block;
+    margin-top:6px;
+  }
+
+  .hint{font-size:12.5px; color:var(--muted); line-height:1.6; margin-top:16px;}
+  .hint b{color:var(--text);}
+
+  footer{
+    margin-top:40px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:#3d4956;
+    text-align:center;
+    max-width:440px;
+    line-height:1.7;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow"><span class="dot"></span> conexão direta · ponto a ponto</div>
+  <h1>Transmita a tela do <span>notebook</span> para o celular</h1>
+  <p>Abra este site nos dois aparelhos. O notebook compartilha a tela, o celular assiste ao vivo — sem instalar nada.</p>
+</header>
+
+<div id="picker" class="picker">
+  <button class="role-card" onclick="showPanel('notebook')">
+    <span class="icon">💻</span>
+    <div class="title">Sou o notebook</div>
+    <div class="desc">Vou compartilhar minha tela</div>
+  </button>
+  <button class="role-card" onclick="showPanel('phone')">
+    <span class="icon">📱</span>
+    <div class="title">Sou o celular</div>
+    <div class="desc">Vou assistir a transmissão</div>
+  </button>
+</div>
+
+<!-- NOTEBOOK PANEL -->
+<div id="panel-notebook" class="panel">
+  <button class="back-btn" onclick="resetAll()">← voltar</button>
+  <div id="nb-status" class="status-row wait"><span class="led"></span><span id="nb-status-text">preparando sala…</span></div>
+
+  <div class="code-box">
+    <div class="label">código da sala</div>
+    <div class="code mono" id="nb-code">— — — —</div>
+    <img id="nb-qr" alt="QR code para conectar" width="150" height="150" style="display:none;">
+  </div>
+
+  <button class="primary" id="nb-share-btn" onclick="startShare()">Selecionar tela e transmitir</button>
+  <p class="hint">No celular, abra este mesmo site, toque em <b>“Sou o celular”</b> e digite o código acima — ou escaneie o QR code.</p>
+</div>
+
+<!-- PHONE PANEL -->
+<div id="panel-phone" class="panel">
+  <button class="back-btn" onclick="resetAll()">← voltar</button>
+  <div id="ph-status" class="status-row wait"><span class="led"></span><span id="ph-status-text">aguardando código</span></div>
+
+  <div id="ph-form">
+    <input class="code-input" id="ph-code-input" placeholder="CÓDIGO" maxlength="9">
+    <button class="primary" onclick="joinRoom()">Conectar</button>
+  </div>
+
+  <video id="ph-video" autoplay playsinline style="display:none;"></video>
+  <p class="hint" id="ph-hint">Peça o código de 4 letras mostrado na tela do notebook.</p>
+</div>
+
+<footer>
+  A transmissão de vídeo é ponto a ponto (WebRTC), direto entre os dois aparelhos.<br>
+  Apenas a sinalização inicial da conexão passa por um servidor público (PeerJS).
+</footer>
+
+<script>
+let peer = null;
+let screenStream = null;
+let currentCall = null;
+
+function showPanel(role){
+  document.getElementById('picker').style.display = 'none';
+  document.getElementById('panel-notebook').classList.remove('active');
+  document.getElementById('panel-phone').classList.remove('active');
+  if(role === 'notebook'){
+    document.getElementById('panel-notebook').classList.add('active');
+    initNotebook();
+  } else {
+    document.getElementById('panel-phone').classList.add('active');
+    const params = new URLSearchParams(window.location.search);
+    const roomFromUrl = params.get('room');
+    if(roomFromUrl){
+      document.getElementById('ph-code-input').value = roomFromUrl.toUpperCase();
+    }
+  }
+}
+
+function resetAll(){
+  if(screenStream){ screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+  if(peer){ peer.destroy(); peer = null; }
+  document.getElementById('picker').style.display = 'grid';
+  document.getElementById('panel-notebook').classList.remove('active');
+  document.getElementById('panel-phone').classList.remove('active');
+  document.getElementById('nb-share-btn').disabled = false;
+  document.getElementById('nb-share-btn').textContent = 'Selecionar tela e transmitir';
+  document.getElementById('ph-form').style.display = 'block';
+  const video = document.getElementById('ph-video');
+  video.style.display = 'none';
+  video.srcObject = null;
+}
+
+function randomCode(){
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let code = '';
+  for(let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)];
+  return code;
+}
+
+function setStatus(prefix, text, state){
+  const row = document.getElementById(prefix + '-status');
+  const label = document.getElementById(prefix + '-status-text');
+  row.className = 'status-row ' + state;
+  label.textContent = text;
+}
+
+function initNotebook(){
+  const code = 'tela-' + randomCode();
+  document.getElementById('nb-code').textContent = code.replace('tela-', '');
+
+  peer = new Peer(code);
+
+  peer.on('open', () => {
+    setStatus('nb', 'sala pronta — aguardando celular', 'wait');
+    const joinUrl = window.location.origin + window.location.pathname + '?room=' + code.replace('tela-','');
+    const qr = document.getElementById('nb-qr');
+    qr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=' + encodeURIComponent(joinUrl);
+    qr.style.display = 'inline-block';
+  });
+
+  peer.on('connection', (conn) => {
+    conn.on('open', () => {
+      setStatus('nb', 'celular conectado', 'ok');
+      if(screenStream){
+        currentCall = peer.call(conn.peer, screenStream);
+      } else {
+        conn.pendingPeer = conn.peer;
+        window.__pendingViewer = conn.peer;
+      }
+    });
+  });
+
+  peer.on('error', (err) => {
+    setStatus('nb', 'erro: ' + err.type, 'err');
+  });
+}
+
+async function startShare(){
+  try{
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: false });
+    document.getElementById('nb-share-btn').disabled = true;
+    document.getElementById('nb-share-btn').textContent = 'Transmitindo…';
+    setStatus('nb', 'tela selecionada — aguardando celular', 'wait');
+
+    screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+      setStatus('nb', 'compartilhamento encerrado', 'err');
+      document.getElementById('nb-share-btn').disabled = false;
+      document.getElementById('nb-share-btn').textContent = 'Selecionar tela e transmitir';
+    });
+
+    if(window.__pendingViewer && peer){
+      currentCall = peer.call(window.__pendingViewer, screenStream);
+      setStatus('nb', 'celular conectado', 'ok');
+    }
+  } catch(err){
+    setStatus('nb', 'permissão negada ou cancelada', 'err');
+  }
+}
+
+function joinRoom(){
+  let input = document.getElementById('ph-code-input').value.trim().toUpperCase();
+  if(!input){ setStatus('ph', 'digite o código da sala', 'err'); return; }
+  const roomId = 'tela-' + input;
+
+  setStatus('ph', 'conectando…', 'wait');
+  peer = new Peer();
+
+  peer.on('open', () => {
+    const conn = peer.connect(roomId);
+    conn.on('open', () => {
+      setStatus('ph', 'conectado — aguardando vídeo do notebook', 'wait');
+    });
+    conn.on('error', () => setStatus('ph', 'não foi possível conectar', 'err'));
+  });
+
+  peer.on('call', (call) => {
+    call.answer();
+    call.on('stream', (remoteStream) => {
+      const video = document.getElementById('ph-video');
+      video.srcObject = remoteStream;
+      video.style.display = 'block';
+      document.getElementById('ph-form').style.display = 'none';
+      document.getElementById('ph-hint').style.display = 'none';
+      setStatus('ph', 'recebendo transmissão ao vivo', 'ok');
+    });
+  });
+
+  peer.on('error', (err) => {
+    if(err.type === 'peer-unavailable'){
+      setStatus('ph', 'sala não encontrada — confira o código', 'err');
+    } else {
+      setStatus('ph', 'erro: ' + err.type, 'err');
+    }
+  });
+}
+</script>
+</body>
+</html>
