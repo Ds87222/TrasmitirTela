@@ -302,8 +302,8 @@
   </div>
 
   <video id="ph-video" autoplay playsinline muted style="display:none;"></video>
+  <button class="secondary" id="ph-maximize-btn" onclick="toggleMaximize()" style="display:none; margin-top:12px; border-color:var(--signal); color:var(--signal);">⛶ Maximizar tela</button>
   <p class="hint" id="ph-hint">Peça o código de 4 letras mostrado na tela do notebook.</p>
-  <p class="hint" id="ph-rotate-hint" style="display:none;">Gire o celular na horizontal para maximizar. Toque na tela para sair da tela cheia.</p>
 </div>
 <div class="maximize-tip" id="maximize-tip">toque na tela para sair da tela cheia</div>
 
@@ -464,9 +464,8 @@ function joinRoom(){
       video.style.display = 'block';
       document.getElementById('ph-form').style.display = 'none';
       document.getElementById('ph-hint').style.display = 'none';
-      document.getElementById('ph-rotate-hint').style.display = 'block';
+      document.getElementById('ph-maximize-btn').style.display = 'block';
       setStatus('ph', 'recebendo transmissão ao vivo', 'ok');
-      applyOrientationLayout();
     });
   });
 
@@ -479,46 +478,44 @@ function joinRoom(){
   });
 }
 
-// ---- girar para paisagem = maximizar o vídeo ----
-function isReceivingStream(){
-  const v = document.getElementById('ph-video');
-  return v.style.display === 'block' && !!v.srcObject;
-}
-
-let maximizeTipTimeout = null;
-
-function applyOrientationLayout(){
-  if(!isReceivingStream()) return;
+// ---- botão de maximizar ----
+function toggleMaximize(){
   const video = document.getElementById('ph-video');
-  const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+  const btn = document.getElementById('ph-maximize-btn');
+  const tip = document.getElementById('maximize-tip');
 
-  if(isLandscape){
+  const goingMax = !video.classList.contains('maximized');
+
+  if(goingMax){
     video.classList.add('maximized');
+    btn.style.display = 'none';
     if(video.requestFullscreen){
-      video.requestFullscreen().catch(() => { /* alguns navegadores bloqueiam sem toque direto — segue no modo maximizado por CSS mesmo assim */ });
+      video.requestFullscreen().catch(() => { /* segue no modo maximizado por CSS mesmo se o navegador bloquear a API */ });
     }
-    const tip = document.getElementById('maximize-tip');
     tip.classList.add('show');
-    clearTimeout(maximizeTipTimeout);
-    maximizeTipTimeout = setTimeout(() => tip.classList.remove('show'), 2800);
+    clearTimeout(window.__maxTipTimeout);
+    window.__maxTipTimeout = setTimeout(() => tip.classList.remove('show'), 2600);
   } else {
     video.classList.remove('maximized');
-    document.getElementById('maximize-tip').classList.remove('show');
+    btn.style.display = 'block';
+    tip.classList.remove('show');
     if(document.fullscreenElement){
       document.exitFullscreen().catch(() => {});
     }
   }
 }
 
-window.matchMedia('(orientation: landscape)').addEventListener('change', applyOrientationLayout);
-window.addEventListener('orientationchange', applyOrientationLayout);
-window.addEventListener('resize', applyOrientationLayout);
-
 document.getElementById('ph-video').addEventListener('click', () => {
+  if(document.getElementById('ph-video').classList.contains('maximized')){
+    toggleMaximize();
+  }
+});
+
+document.addEventListener('fullscreenchange', () => {
   const video = document.getElementById('ph-video');
-  if(video.classList.contains('maximized')){
-    video.classList.remove('maximized');
-    if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if(!document.fullscreenElement && video.classList.contains('maximized')){
+    // usuário saiu da tela cheia pelo gesto do sistema (voltar/deslizar)
+    toggleMaximize();
   }
 });
 </script>
