@@ -213,7 +213,33 @@
     background:#000;
     display:block;
     margin-top:6px;
+    transition:border-radius .2s ease;
   }
+  video.maximized{
+    position:fixed;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    border-radius:0;
+    margin:0;
+    z-index:9999;
+    object-fit:contain;
+  }
+  .maximize-tip{
+    display:none;
+    position:fixed;
+    bottom:20px; left:50%; transform:translateX(-50%);
+    background:rgba(17,22,29,.92);
+    border:1px solid var(--line);
+    color:var(--muted);
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    padding:9px 16px;
+    border-radius:999px;
+    z-index:10000;
+    pointer-events:none;
+  }
+  .maximize-tip.show{display:block;}
 
   .hint{font-size:12.5px; color:var(--muted); line-height:1.6; margin-top:16px;}
   .hint b{color:var(--text);}
@@ -275,9 +301,11 @@
     <button class="primary" onclick="joinRoom()">Conectar</button>
   </div>
 
-  <video id="ph-video" autoplay playsinline style="display:none;"></video>
+  <video id="ph-video" autoplay playsinline muted style="display:none;"></video>
   <p class="hint" id="ph-hint">Peça o código de 4 letras mostrado na tela do notebook.</p>
+  <p class="hint" id="ph-rotate-hint" style="display:none;">Gire o celular na horizontal para maximizar. Toque na tela para sair da tela cheia.</p>
 </div>
+<div class="maximize-tip" id="maximize-tip">toque na tela para sair da tela cheia</div>
 
 <footer>
   A transmissão de vídeo é ponto a ponto (WebRTC), direto entre os dois aparelhos.<br>
@@ -288,6 +316,17 @@
 let peer = null;
 let screenStream = null;
 let currentCall = null;
+
+// Vários servidores STUN aumentam a chance de achar o caminho de rede
+// mais rápido entre os dois aparelhos, reduzindo o tempo de conexão.
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' }
+  ]
+};
 
 function showPanel(role){
   document.getElementById('picker').style.display = 'none';
@@ -338,7 +377,7 @@ function initNotebook(){
   const code = 'tela-' + randomCode();
   document.getElementById('nb-code').textContent = code.replace('tela-', '');
 
-  peer = new Peer(code);
+  peer = new Peer(code, { config: ICE_CONFIG });
 
   peer.on('open', () => {
     setStatus('nb', 'sala pronta — aguardando celular', 'wait');
@@ -367,7 +406,21 @@ function initNotebook(){
 
 async function startShare(){
   try{
-    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: false });
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        cursor: 'always',
+        frameRate: { ideal: 24, max: 30 },
+        width: { ideal: 1600, max: 1920 },
+        height: { ideal: 900, max: 1080 }
+      },
+      audio: false
+    });
+
+    // 'motion' prioriza fluidez/baixa latência em vez de nitidez máxima —
+    // é a principal causa de delay perceptível em compartilhamento de tela.
+    const track = screenStream.getVideoTracks()[0];
+    if('contentHint' in track) track.contentHint = 'motion';
+
     document.getElementById('nb-share-btn').disabled = true;
     document.getElementById('nb-share-btn').textContent = 'Transmitindo…';
     setStatus('nb', 'tela selecionada — aguardando celular', 'wait');
@@ -393,7 +446,7 @@ function joinRoom(){
   const roomId = 'tela-' + input;
 
   setStatus('ph', 'conectando…', 'wait');
-  peer = new Peer();
+  peer = new Peer(undefined, { config: ICE_CONFIG });
 
   peer.on('open', () => {
     const conn = peer.connect(roomId);
@@ -411,7 +464,9 @@ function joinRoom(){
       video.style.display = 'block';
       document.getElementById('ph-form').style.display = 'none';
       document.getElementById('ph-hint').style.display = 'none';
+      document.getElementById('ph-rotate-hint').style.display = 'block';
       setStatus('ph', 'recebendo transmissão ao vivo', 'ok');
+      applyOrientationLayout();
     });
   });
 
@@ -423,6 +478,49 @@ function joinRoom(){
     }
   });
 }
+
+// ---- girar para paisagem = maximizar o vídeo ----
+function isReceivingStream(){
+  const v = document.getElementById('ph-video');
+  return v.style.display === 'block' && !!v.srcObject;
+}
+
+let maximizeTipTimeout = null;
+
+function applyOrientationLayout(){
+  if(!isReceivingStream()) return;
+  const video = document.getElementById('ph-video');
+  const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+
+  if(isLandscape){
+    video.classList.add('maximized');
+    if(video.requestFullscreen){
+      video.requestFullscreen().catch(() => { /* alguns navegadores bloqueiam sem toque direto — segue no modo maximizado por CSS mesmo assim */ });
+    }
+    const tip = document.getElementById('maximize-tip');
+    tip.classList.add('show');
+    clearTimeout(maximizeTipTimeout);
+    maximizeTipTimeout = setTimeout(() => tip.classList.remove('show'), 2800);
+  } else {
+    video.classList.remove('maximized');
+    document.getElementById('maximize-tip').classList.remove('show');
+    if(document.fullscreenElement){
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+}
+
+window.matchMedia('(orientation: landscape)').addEventListener('change', applyOrientationLayout);
+window.addEventListener('orientationchange', applyOrientationLayout);
+window.addEventListener('resize', applyOrientationLayout);
+
+document.getElementById('ph-video').addEventListener('click', () => {
+  const video = document.getElementById('ph-video');
+  if(video.classList.contains('maximized')){
+    video.classList.remove('maximized');
+    if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+});
 </script>
 </body>
 </html>
